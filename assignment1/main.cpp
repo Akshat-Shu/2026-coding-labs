@@ -73,13 +73,13 @@ std::string initials(std::string_view name)
   if (name.empty())
     throw std::invalid_argument("Name cannot be empty");
 
-  result.push_back(to_upper_case(name[0]));
+  result.push_back(to_upper_case(name.at(0)));
 
   auto space_pos = name.find(' ');
   if (space_pos == std::string_view::npos)
     throw std::invalid_argument("Name must contain at least a first and last name");
 
-  result.push_back(to_upper_case(name[space_pos + 1]));
+  result.push_back(to_upper_case(name.at(space_pos + 1)));
   return result;
 }
 
@@ -156,7 +156,39 @@ std::vector<std::pair<std::string, std::string>>
 run_mixer(std::vector<std::string> &applicants)
 {
   // STUDENT TODO: Implement this function.
-  throw std::runtime_error("Not implemented: run_mixer");
+  // throw std::runtime_error("Not implemented: run_mixer");
+  std::vector<std::pair<std::string, std::string>> mixer_pairs;
+
+  auto begin_it = applicants.begin();
+
+  while (begin_it != applicants.end())
+  {
+    std::vector<std::string> matches = find_matches(*begin_it, applicants);
+
+    if (matches.size() <= 1)
+    { // this one is a lonely heart.
+      begin_it = next(begin_it);
+      continue;
+    }
+
+    matches.erase(matches.begin()); // remove the first match since it's the one we're trying to pair
+    std::string match = get_match(matches);
+
+    auto match_it = std::find(applicants.begin(), applicants.end(), match);
+
+    if (match_it == applicants.end())
+    {
+      // this should never happen.
+      begin_it = next(begin_it);
+      continue;
+    }
+
+    mixer_pairs.emplace_back(*begin_it, *match_it);
+    applicants.erase(match_it);
+    begin_it = applicants.erase(begin_it);
+  }
+
+  return mixer_pairs;
 }
 
 /* #### Please don't remove this line! #### */
