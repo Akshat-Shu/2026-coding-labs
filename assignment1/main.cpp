@@ -122,7 +122,18 @@ std::vector<std::string> find_matches(std::string_view name,
 std::string get_match(const std::vector<std::string> &matches)
 {
   // STUDENT TODO: Implement this function.
-  throw std::runtime_error("Not implemented: get_match");
+  // throw std::runtime_error("Not implemented: get_match");
+
+  if (matches.empty())
+    return "NO MATCHES FOUND.";
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  std::string result; // just want to sample a single string here, no vector needed
+  std::sample(matches.begin(), matches.end(), &result, 1, gen);
+
+  return result;
 }
 
 /**
