@@ -69,7 +69,6 @@ std::string initials(std::string_view name)
   // STUDENT TODO: Implement this function.
   // throw std::runtime_error("Not implemented: initials");
 
-  // elper. Given a name like "Marceline McMillan", return its initials ("MM"), uppercased. This function should take a std::string_view, not a std::string, to avoid unnecessary allocations.
   std::string result;
   if (name.empty())
     throw std::invalid_argument("Name cannot be empty");
@@ -97,7 +96,20 @@ std::vector<std::string> find_matches(std::string_view name,
                                       const std::vector<std::string> &students)
 {
   // STUDENT TODO: Implement this function.
-  throw std::runtime_error("Not implemented: find_matches");
+  // throw std::runtime_error("Not implemented: find_matches");
+
+  const std::string name_initials = initials(name);
+
+  std::vector<std::string> matches;
+  std::ranges::copy_if(
+      students, std::back_inserter(matches),
+      [&name_initials](const std::string &student_intials)
+      {
+        return student_intials == name_initials;
+      },
+      &initials);
+
+  return matches;
 }
 
 /**
