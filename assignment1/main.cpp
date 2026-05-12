@@ -32,7 +32,20 @@
  */
 std::vector<std::string> get_applicants(const std::string& filename) {
   // STUDENT TODO: Implement this function.
-  throw std::runtime_error("Not implemented: get_applicants");
+  // throw std::runtime_error("Not implemented: get_applicants");
+  
+  const int EXPECTED_APPLICANTS = 1000;
+  std::vector<std::string> applicants;
+  applicants.reserve(EXPECTED_APPLICANTS);
+  
+  std::ifstream infile(filename);
+  std::string line;
+
+  while (std::getline(infile, line)) {
+    applicants.push_back(line);
+  }
+
+  return applicants;
 }
 
 /**

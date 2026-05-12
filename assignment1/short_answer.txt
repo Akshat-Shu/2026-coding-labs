@@ -2,7 +2,7 @@ Assignment 1: Marriage Pact — short answers
 =============================================
 
 Q1. reserve vs resize — and the capacity you chose in get_applicants.
-    YOUR ANSWER:
+    YOUR ANSWER: reserved a capacity of 1000 in the vector since we already have an idea of the total number of applicants, in order to avoid resizing.
 
 
 Q2. What does it mean for a std::ranges algorithm to take a projection?
