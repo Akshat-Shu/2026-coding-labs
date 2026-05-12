@@ -20,7 +20,15 @@ Q2. What does it mean for a std::ranges algorithm to take a projection?
 Q3. Iterator invalidation in run_mixer. Which strategy did you choose
     (erase-returns-next-iterator / indices / restart) and why?
     What specifically goes wrong with the naive approach?
-    YOUR ANSWER: 
+    YOUR ANSWER: I chose the erase-returns-next-iterator strategy because it allows us to safely 
+    remove elements without bothering about out-of-bounds access and this approach is more efficient
+    in comparison to restarting. 
+    When an iterator is erased, the iterators before the erased element remain valid 
+    and can be safely used to access the elements at those positions.
+    The Naive approach is less efficient because it requires us to find matches at each iteration 
+    of the loop, only to find a single matching pair, an optimization over this would be to first
+    bucket all of the applicants by their initials and then we can just iterate through the 
+    buckets to find matches. 
 
 
 Q4. at() vs []. When, if ever, would you reach for vec.at(i) over
