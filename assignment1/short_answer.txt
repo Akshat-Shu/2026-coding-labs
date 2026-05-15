@@ -13,8 +13,8 @@ Q2. What does it mean for a std::ranges algorithm to take a projection?
     YOUR ANSWER: A projection transforms the elements of the container before 
     they are passed to the algorithm, which in this case was an equality comparison.
     In find_matches, we used a projection to transform the student names into their initials.
-    An alternative way to do the same thing would be to apply the function inside the lambda
-    but using a projection allows us to separate the transformation logic from the comparison logic.
+    An alternative way to do the same thing would be to apply the function inside the lambda,
+    using a projection allows us to separate the transformation logic from the comparison logic.
 
 
 Q3. Iterator invalidation in run_mixer. Which strategy did you choose
@@ -22,7 +22,10 @@ Q3. Iterator invalidation in run_mixer. Which strategy did you choose
     What specifically goes wrong with the naive approach?
     YOUR ANSWER: I chose the erase-returns-next-iterator strategy because it allows us to safely 
     remove elements without bothering about out-of-bounds access and this approach is more efficient
-    in comparison to restarting. 
+    in comparison to restarting.
+    The primary issue with the naive approach is iterator invalidation, once we delete the current
+    element as well as the matching element, the iterators pointing to those elements become invalid
+    and accessing them would lead to undefined behavior.
     When an iterator is erased, the iterators before the erased element remain valid 
     and can be safely used to access the elements at those positions.
     The Naive approach is less efficient because it requires us to find matches at each iteration 
@@ -34,5 +37,6 @@ Q3. Iterator invalidation in run_mixer. Which strategy did you choose
 Q4. at() vs []. When, if ever, would you reach for vec.at(i) over
     vec[i] in this assignment?
     YOUR ANSWER: Inside the function initials, we have to get the first characters 
-    of the first and last name, the braced accessor allows us to access an out-of-bounds index 
-    but .at() would throw an error instead if index is invalid.
+    of the first and last name, the braced accessor leads to undefined behaviour
+    if the index is out-of-bounds. On the other hand, .at() would throw an error 
+    instead if index is invalid.
