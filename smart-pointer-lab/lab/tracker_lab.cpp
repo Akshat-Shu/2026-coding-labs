@@ -37,25 +37,30 @@ static int next_id() {
 // =============================================================================
 template <typename T>
 class Tracker {
-public:
     int id_;
     T*  data_;  // owning raw pointer — YOU are responsible for deleting this
 
-    explicit Tracker(T value) {
+public:
+    explicit Tracker(T value): id_(next_id()), data_(new T(value)) {
         // TODO: assign id_ using next_id()
         // TODO: allocate data_ with new
         // TODO: log "[id_] born"
+        // no error checking, new already fails!
+        std::cerr << "[" << id_ << "] born\n";
     }
 
     ~Tracker() {
         // TODO: log "[id_] destroyed"
         // TODO: delete data_
+        std::cerr << "[" << id_ << "] destroyed\n";
+        delete data_; // Never going to be NULL!
     }
 
-    Tracker(const Tracker& other) {
+    Tracker(const Tracker& other): id_(next_id()), data_(new T(*other.data_)) {
         // TODO: assign id_ using next_id()
         // TODO: deep-copy other.data_
         // TODO: log "[id_] copied from [other.id_]"
+        std::cerr << "[" << id_ << "] copied from [" << other.id_ << "]\n";
     }
 
     Tracker& operator=(const Tracker& other) {
@@ -63,12 +68,17 @@ public:
         // TODO: delete old data_
         // TODO: deep-copy other.data
         // TODO: log "[id_] assigned from [other.id_]"
+        if (this == &other) return *this;
+        delete data_;
+        data_ = new T(*other.data_);
+        std::cerr << "[" << id_ << "] assigned from [" << other.id_ << "]\n";
+        return *this;
     }
 
     // implement getters
     // (do you need multiple? think about const correctness)
     T& get() {
-        
+        return *data_;
     }
 };
 
