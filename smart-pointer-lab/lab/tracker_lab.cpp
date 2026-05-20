@@ -17,7 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: monotonically increasing ID so every Tracker has a unique name.
 // ─────────────────────────────────────────────────────────────────────────────
-static int next_id() {
+static int next_id()
+{
     static std::atomic<int> counter{0};
     return ++counter;
 }
@@ -36,12 +37,15 @@ static int next_id() {
 // you need to write all three. Here you'll write all three by hand.
 // =============================================================================
 template <typename T>
-class Tracker {
+class Tracker
+{
     int id_;
-    T*  data_;  // owning raw pointer — YOU are responsible for deleting this
+    // T*  data_;  // owning raw pointer — YOU are responsible for deleting this
+    std::unique_ptr<T> data_;
 
 public:
-    explicit Tracker(T value): id_(next_id()), data_(new T(value)) {
+    explicit Tracker(T value) : id_(next_id()), data_(std::make_unique<T>(value))
+    {
         // TODO: assign id_ using next_id()
         // TODO: allocate data_ with new
         // TODO: log "[id_] born"
@@ -49,43 +53,43 @@ public:
         std::cerr << "[" << id_ << "] born\n";
     }
 
-    ~Tracker() {
+    ~Tracker()
+    {
         // TODO: log "[id_] destroyed"
         // TODO: delete data_
         std::cerr << "[" << id_ << "] destroyed\n";
-        delete data_; // Never going to be NULL!
     }
 
-    Tracker(const Tracker& other): id_(next_id()), data_(new T(*other.data_)) {
-        // TODO: assign id_ using next_id()
-        // TODO: deep-copy other.data_
-        // TODO: log "[id_] copied from [other.id_]"
-        std::cerr << "[" << id_ << "] copied from [" << other.id_ << "]\n";
+    Tracker(const Tracker &other) = delete;
+    Tracker &operator=(const Tracker &other) = delete;
+
+    Tracker(Tracker &&other) noexcept 
+    : id_(next_id()), data_(std::move(other.data_)) {
+        std::cerr << "[" << id_ << "] moved from [" << other.id_ << "]\n";
     }
 
-    Tracker& operator=(const Tracker& other) {
-        // TODO: guard against self-assignment (if (this == &other) return *this;)
-        // TODO: delete old data_
-        // TODO: deep-copy other.data
-        // TODO: log "[id_] assigned from [other.id_]"
-        if (this == &other) return *this;
-        delete data_;
-        data_ = new T(*other.data_);
-        std::cerr << "[" << id_ << "] assigned from [" << other.id_ << "]\n";
+    Tracker &operator=(Tracker &&other) noexcept {
+        if (this == &other)
+            return *this;
+
+        data_ = std::move(other.data_);
+        std::cerr << "[" << id_ << "] move-assigned from [" << other.id_ << "]\n";
         return *this;
     }
 
     // implement getters
     // (do you need multiple? think about const correctness)
-    T& get() {
+    T &get()
+    {
         return *data_;
     }
 };
 
 // ─── Stage 1 main ─────────────────────────────────────────────────────────────
 // Uncomment this block for Stage 1. Comment it out before Stage 2.
-
-int main() {
+/*
+int main()
+{
     std::cerr << "=== Stage 1: raw pointer Tracker ===\n";
 
     // Predict the log before running:
@@ -93,7 +97,7 @@ int main() {
     {
         Tracker<int> a(10);
         Tracker<int> b(20);
-        Tracker<int> c = a;   // copy constructor
+        Tracker<int> c = a; // copy constructor
 
         std::cerr << "a=" << a.get() << " b=" << b.get() << " c=" << c.get() << "\n";
     } // a, b, c destroyed here
@@ -112,13 +116,13 @@ int main() {
     std::cerr << "\n--- self-assignment test ---\n";
     {
         Tracker<int> x(99);
-        x = x;  // self-assignment: what goes wrong if you don't guard?
+        x = x; // self-assignment: what goes wrong if you don't guard?
         std::cerr << "x=" << x.get() << "\n";
     }
 
     return 0;
 }
-
+*/
 
 // =============================================================================
 // STAGE 2 — Refactor to use std::unique_ptr<T> as the member.
@@ -136,7 +140,7 @@ int main() {
 // =============================================================================
 
 // ─── Stage 2 main ─────────────────────────────────────────────────────────────
-/*
+// /*
 int main() {
     std::cerr << "=== Stage 2: unique_ptr Tracker ===\n";
 
@@ -167,7 +171,7 @@ int main() {
 
     return 0;
 }
-*/
+// */
 
 // =============================================================================
 // STAGE 3 — Shared ownership with std::shared_ptr<T>.
@@ -183,24 +187,28 @@ int main() {
 //   5. Print use_count() after each addition to watch the ref count climb.
 //   6. Let one portfolio go out of scope — watch use_count() drop.
 // =============================================================================
-class Portfolio {
+class Portfolio
+{
 public:
     std::string name_;
     std::vector<std::shared_ptr<Tracker<int>>> holdings_;
 
     explicit Portfolio(std::string name) : name_(std::move(name)) {}
 
-    void add(std::shared_ptr<Tracker<int>> t) {
+    void add(std::shared_ptr<Tracker<int>> t)
+    {
         // TODO: push_back t, then log name_ + " now holds tracker " + id
         //       and print t.use_count()
     }
 
-    void print() const {
+    void print() const
+    {
         // TODO: implement print out for each holding in the portfolio
     }
 };
 
-std::shared_ptr<Tracker<int>> make_tracker(int value) {
+std::shared_ptr<Tracker<int>> make_tracker(int value)
+{
     // TODO: produce a shared pointer
     // Q1: Why make a make_tracker function?
     // Q2: There are two ways to make a shared_ptr<Tracker<int>>. Which one is more appropriate here and is one always better?
@@ -255,7 +263,7 @@ int main() {
 // =============================================================================
 
 // ─── Placeholder main (remove once you uncomment a stage's main) ──────────────
-int main() {
+/*int main() {
     std::cerr << "Uncomment a stage's main() block and recompile.\n";
     return 0;
-}
+}*/
