@@ -63,12 +63,14 @@ public:
     Tracker(const Tracker &other) = delete;
     Tracker &operator=(const Tracker &other) = delete;
 
-    Tracker(Tracker &&other) noexcept 
-    : id_(next_id()), data_(std::move(other.data_)) {
+    Tracker(Tracker &&other) noexcept
+        : id_(next_id()), data_(std::move(other.data_))
+    {
         std::cerr << "[" << id_ << "] moved from [" << other.id_ << "]\n";
     }
 
-    Tracker &operator=(Tracker &&other) noexcept {
+    Tracker &operator=(Tracker &&other) noexcept
+    {
         if (this == &other)
             return *this;
 
@@ -82,6 +84,11 @@ public:
     T &get()
     {
         return *data_;
+    }
+
+    int get_id() const
+    {
+        return id_;
     }
 };
 
@@ -140,7 +147,7 @@ int main()
 // =============================================================================
 
 // ─── Stage 2 main ─────────────────────────────────────────────────────────────
-// /*
+/*
 int main() {
     std::cerr << "=== Stage 2: unique_ptr Tracker ===\n";
 
@@ -171,7 +178,7 @@ int main() {
 
     return 0;
 }
-// */
+*/
 
 // =============================================================================
 // STAGE 3 — Shared ownership with std::shared_ptr<T>.
@@ -199,11 +206,31 @@ public:
     {
         // TODO: push_back t, then log name_ + " now holds tracker " + id
         //       and print t.use_count()
+
+        // we have no id if nullptr!
+        Tracker<int> *t_ptr = t.get();
+        if (t_ptr == nullptr)
+            throw std::runtime_error("Cannot add null tracker to portfolio");
+        int t_id = t_ptr->get_id();
+
+        holdings_.push_back(std::move(t));
+
+        std::shared_ptr<Tracker<int>> &last_added = holdings_.back();
+        std::cerr << name_ << " now holds tracker " << t_id << " (use_count=" << last_added.use_count() << ")\n";
     }
 
     void print() const
     {
         // TODO: implement print out for each holding in the portfolio
+        std::cout << "[Portfolio " << name_ << "] holds trackers: ";
+        for (const auto &t : holdings_)
+        {
+            if (t)
+                std::cout << t->get_id() << " ";
+            else
+                std::cout << "null ";
+        }
+        std::cout << std::endl;
     }
 };
 
@@ -212,10 +239,27 @@ std::shared_ptr<Tracker<int>> make_tracker(int value)
     // TODO: produce a shared pointer
     // Q1: Why make a make_tracker function?
     // Q2: There are two ways to make a shared_ptr<Tracker<int>>. Which one is more appropriate here and is one always better?
+
+    // Answer (Q1): A function like make_tracker abstracts away
+    // the details of how the Tracker is created and managed.
+    // It allows us to change the implementation of Tracker or the
+    // way we manage its memory without affecting the rest of
+    // the code that uses it.
+
+    // Answer (Q2): The two common ways to create a shared_ptr are:
+    // 1. Using std::make_shared: std::make_shared<Tracker<int>>(value);
+    // 2. Using the shared_ptr constructor: std::shared_ptr<Tracker<int>>(new Tracker<int>(value));
+    // std::make_shared is always better because it provides better cache locality and is more
+    // efficient. It allocates the control block and the object in a single allocation, while
+    // the second method requires two separate allocations (one for the control block and one for the object).
+    // Additionally, std::make_shared is exception-safe, as it won't leak memory if the
+    // constructor of Tracker throws an exception.
+
+    return std::make_shared<Tracker<int>>(value);
 }
 
 // ─── Stage 3 main ─────────────────────────────────────────────────────────────
-/*
+// /*
 int main() {
     std::cerr << "=== Stage 3: shared_ptr ===\n";
 
@@ -243,7 +287,7 @@ int main() {
 
     return 0;
 }
-*/
+// */
 
 // =============================================================================
 // STAGE 4 — Cycles: the one hole in shared_ptr.
