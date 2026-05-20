@@ -302,6 +302,26 @@ int main() {
 //   Q4: Look at the Trader-Order set of objects. Why is the back-ref creation bad, and how do we fix it?
 // =============================================================================
 
+// Answer (Q1): The direction of the link that should be weak is the one that creates a cycle. 
+// In a cycle, two or more objects hold shared_ptrs to each other, preventing their reference 
+// counts from reaching zero and thus never being destroyed. 
+// By making one of the links a weak_ptr, we break the cycle and allow for proper cleanup.
+
+// Answer (Q2): To safely dereference a weak_ptr, you should use the .lock() method, which returns a shared_ptr.
+// If the original shared_ptr has been destroyed, .lock() will return an 
+// empty shared_ptr (i.e., one that evaluates to false).
+
+// Answer (Q3): When the shared_ptr owner of a weak_ptr is destroyed, 
+// the weak_ptr becomes expired. Calling .lock() on an expired weak_ptr will return an empty shared_ptr,
+
+// Answer (Q4): The back-ref creation in the Trader-Order example is bad because it creates a cycle of shared_ptrs.
+// In order to fix it, we should change the reference back in the order to the trader to be a weak_ptr instead of 
+// a shared_ptr. In order to get a weak pointer from a Trader object, we can make it interit from 
+// std::enable_shared_from_this<Trader>, which allows us to create a weak_ptr to the Trader from within its 
+// member functions using shared_from_this(). This way, the Order can hold a weak_ptr to its owning Trader without 
+// preventing the Trader from being destroyed when it's no longer needed.
+
+
 // =============================================================================
 // STAGE 5 — See leak_hunt.cpp.
 // =============================================================================

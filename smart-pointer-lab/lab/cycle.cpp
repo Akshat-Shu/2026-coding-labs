@@ -31,7 +31,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 struct Node {
     int id_;
-    std::shared_ptr<Node> next_; 
+    std::weak_ptr<Node> next_;  // weak_ptr to avoid cycle
 
     explicit Node(int id) : id_(id) {
         std::cerr << "[Node #" << id_ << "] born\n";
@@ -56,7 +56,15 @@ int main() {
 
         std::cerr << "a.use_count=" << a.use_count()
                   << "  b.use_count=" << b.use_count() << "\n";
+        
+        if (auto next_a = a->next_.lock()) {
+            std::cerr << "a->next_ points to node #" << next_a->id_ << "\n";
+        }
+        if (auto next_b = b->next_.lock()) {
+            std::cerr << "b->next_ points to node #" << next_b->id_ << "\n";
+        }
     }
+
     // Expected with the cycle:    neither "destroyed" line prints.
     // Expected after your fix:    both "destroyed" lines print here.
 
@@ -79,7 +87,7 @@ struct Trader;
 struct Order {
     int id_;
     std::string symbol_;
-    std::shared_ptr<Trader> owner_;
+    std::weak_ptr<Trader> owner_;
 
     Order(int id, std::string sym)
         : id_(id), symbol_(std::move(sym))
@@ -92,7 +100,8 @@ struct Order {
     }
 };
 
-struct Trader {
+struct Trader : public std::enable_shared_from_this<Trader> // for shared_from_this()
+{
     int id_;
     std::string name_;
     std::shared_ptr<Order> active_order_;  // Trader owns its current Order
@@ -109,9 +118,10 @@ struct Trader {
 
     void place_order(std::shared_ptr<Order> o) {
         active_order_ = o;
-        o->owner_ = std::shared_ptr<Trader>(
-            active_order_->owner_ // ?
-        );
+        active_order_->owner_ = std::weak_ptr<Trader>(shared_from_this());
+        // o->owner_ = std::shared_ptr<Trader>(
+        //     active_order_->owner_ // ?
+        // );
         std::cerr << "[Trader #" << id_ << "] placed order #" << o->id_ << "\n";
     }
 };
