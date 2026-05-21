@@ -66,9 +66,10 @@ struct Resource {
 // process_data allocates a Resource with raw new, does some work,
 // then deletes it. But if the work throws, the delete is skipped.
 //
-// Your prediction: ___________________________________________________________
-// ASan symptom:    ___________________________________________________________
-// Fix:             ___________________________________________________________
+// Your prediction: Bug inside process_data(99) — the Resource will be born but never destroyed.
+// ASan symptom:    ASan will report a memory leak of one Resource object, with the stack trace showing the allocation inside process_data(99) and no corresponding deallocation.
+// Fix:             Replace the raw pointer with a std::unique_ptr<Resource> to ensure that the 
+//                  Resource is automatically destroyed when it goes out of scope, even if an exception is thrown.
 // =============================================================================
 static void risky_work(int x) {
     if (x > 50)
@@ -77,26 +78,29 @@ static void risky_work(int x) {
 }
 
 void process_data(int x) {
-    Resource* r = new Resource("process_data", x);
+    std::unique_ptr<Resource> r = std::make_unique<Resource>("process_data", x);
 
     risky_work(x);
 
     r->describe();
-    delete r; 
+    // delete r; 
 }
 
 // =============================================================================
 // BUG B — ???
 //
-// Your prediction: ___________________________________________________________
-// ASan symptom:    ___________________________________________________________
-// Fix:             ___________________________________________________________
+// Your prediction: Cyclic references between Publisher and Subscriber will prevent their destructors from being called, resulting in a memory leak.
+// ASan symptom:    ASan will report a memory leak of both Publisher and Subscriber objects, 
+//                  with stack traces showing their allocations in run_pubsub() and no corresponding deallocations.
+// Fix:             In Publisher, change the shared_ptr to a weak_ptr to break the cycle. Then, when accessing the subscriber, 
+//                  use .lock() to safely check if it still exists before using it. 
+//                  This way, both Publisher and Subscriber can be properly destroyed when they go out of scope.
 // =============================================================================
 struct Subscriber;
 
 struct Publisher {
     int id_;
-    std::shared_ptr<Subscriber> subscriber_; 
+    std::weak_ptr<Subscriber> subscriber_; 
 
     explicit Publisher(int id) : id_(id) {
         std::cerr << "[Publisher  #" << id_ << "] born\n";
@@ -138,7 +142,7 @@ void run_pubsub() {
 // Note: ASan won't catch this one — it's not a memory error, it's a logic
 // error. The log will show the resource dying at the wrong time.
 // =============================================================================
-void print_resource(std::unique_ptr<Resource> r) { 
+void print_resource(const std::unique_ptr<Resource> &r) { 
     std::cerr << "  print_resource: ";
     r->describe();
 }
