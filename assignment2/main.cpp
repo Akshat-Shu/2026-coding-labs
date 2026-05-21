@@ -9,6 +9,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <views>
 
 #include "unique_ptr.h"
 
@@ -60,8 +61,8 @@ cs106l::unique_ptr<ListNode<T>> create_list(const std::vector<T>& values) {
 
   cs106l::unique_ptr head;
 
-  for(int i = values.size()-1; i >= 0; i--) {
-    cs106l::unique_ptr<T> current_node = cs106l::make_unique<T>(values[i]);
+  for(std::views::revese(values)) {
+    cs106l::unique_ptr<ListNode<T>> current_node = cs106l::make_unique<ListNode<T>>(values[i]);
     
     current_node->next = std::move(head);
 
