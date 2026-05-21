@@ -5,22 +5,43 @@ Unique Pointer
 --------------
 
 Q1. List one or two benefits of using RAII to manage memory instead manually calling `new` and `delete`.
-A1. TODO
+A1. RAII abstracts away the details of memory management, making it easier to write correct code without 
+worrying about memory leaks or dangling pointers. It also ensures that resources are properly released
+ when they go out of scope, even in the presence of exceptions.
 
 Q2. When implementing move semantics for a `unique_ptr`, for example in the move constructor `unique_ptr(unique_ptr&& other)`, it is essential that we set the underlying pointer of the `other` parameter to `nullptr` before exiting the function. Explain in your own words what problem would arise if we did not.
-A2. TODO
+A2. If we did not set the underlying pointer of the `other` parameter to `nullptr`, both the original `unique_ptr` and the moved-to `unique_ptr` 
+would point to the same resource. This would lead to a double deletion problem when both `unique_ptr`s go out of scope and attempt to delete the same resource, 
+resulting in undefined behavior.
 
 Q3. This method of recursive deallocation through RAII works great for small lists, but may pose a problem for longer lists. Why? Hint: what is the limit for how "deep" a recursive function's call stack can grow?
-A3. TODO
+A3. The problem with recursive deallocation through RAII for longer lists is that it can lead to a stack overflow. 
+The call stack has a limited size, and if the list is too long, the recursive calls will exceed this limit, causing 
+the program to crash.
 
 Q4. What does `std::move` do in this context? Why is it safe to use `std::move` and move semantics here?
-A4. TODO
+A4. `std::move` is a standard library function that casts its argument to an rvalue reference, indicating that the resource can be "moved from" rather than copied.
+In this context, it allows us to transfer ownership of the resource from one `unique_ptr` to another without copying. It is safe to use `std::move` and move semantics here 
+because we are transferring ownership of a resource that is managed by a `unique_ptr`, which ensures that there will be no double deletion or memory leaks.
 
 Q5. Why does `operator->` return `T*` (a pointer) rather than `T&` (a reference)? Walk through what the compiler does when it sees `ptr->member`.
-A5. TODO
+A5. `operator->` returns `T*` because the `->` operator is designed to work with pointers. When the compiler sees `ptr->member`, it first calls `ptr.operator->()`, which returns 
+a pointer to the underlying object. Then, it accesses the member of that object using the pointer, effectively performing `(*ptr.operator->()).member`. If `operator->` were to return
+a reference instead, it would not be able to chain multiple `->` operators together, which is a common use case for smart pointers.
 
 Q6. Why does this class need BOTH `T& operator*()` and `const T& operator*() const`? Give a one-line code example that would fail to compile if one of them were missing, and explain which one.
-A6. TODO
+A6. This class needs both `T& operator*()` and `const T& operator*() const` to allow dereferencing of both non-const and const `unique_ptr` objects. If we only had the non-const version,
+we would not be able to dereference a const `unique_ptr`, and if we only had the const version, we would not be able to modify the object through a non-const `unique_ptr`. 
 
 Q7. We marked `operator bool()` as `explicit`. What kind of unintended code would compile if we had left the `explicit` off? Give a concrete example.
-A7. TODO
+A7. If we had left the `explicit` off, it would allow implicit conversions to bool, which could lead to unintended consequences. For example:
+unique_ptr<int> ptr = make_unique<int>(5);
+if (ptr) {
+    // do something
+}
+In this case, the `if (ptr)` statement would compile and work as intended, but if we had an unintended implicit conversion, we could accidentally write something like:
+unique_ptr<int> ptr = make_unique<int>(5);
+if (ptr == true) {
+    // do something
+}
+This would compile but is not the intended use of the `operator bool()`.
