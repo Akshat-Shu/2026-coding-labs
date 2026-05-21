@@ -62,17 +62,20 @@
 // TODO Part 1.1: define the lambda. It should be a non-capturing lambda that
 //                accepts a FILE* and calls std::fclose if the pointer is non-null.
 //                Log something like "fclose called on " + the FILE* address to cerr.
-// auto closer = [] (FILE* f) { ... };
+auto closer = [] (FILE* f) {
+    if (f)
+        std::fclose(f);
+};
 
 // TODO Part 1.2: define the using-alias.
-// using FilePtr = std::unique_ptr<FILE, decltype(closer)>;
+using FilePtr = std::unique_ptr<FILE, decltype(closer)>;
 
 // TODO Part 1.3: implement the factory.
-// FilePtr open_file(const char* path, const char* mode) {
-//     FILE* raw = std::fopen(path, mode);
-//     if (!raw) throw std::runtime_error("fopen failed");
-//     return FilePtr(raw, closer);
-// }
+FilePtr open_file(const char* path, const char* mode) {
+    FILE* raw = std::fopen(path, mode);
+    if (!raw) throw std::runtime_error("fopen failed");
+    return FilePtr(raw, closer);
+}
 
 // ─── Part 1 main ────────────────────────────────────────────────────────────
 /*
@@ -131,30 +134,31 @@ int main() {
 // =============================================================================
 
 // TODO Part 2.1: define the functor.
-// struct CountingFileCloser {
-//     int* close_count;
-//     void operator()(FILE* f) const {
-//         if (f) {
-//             std::fclose(f);
-//             ++*close_count;
-//             std::cerr << "fclose #" << *close_count << " on " << f << "\n";
-//         }
-//     }
-// };
+struct CountingFileCloser {
+    int* close_count;
+
+    void operator()(FILE* f) const {
+        if (f) {
+            std::fclose(f);
+            ++*close_count;
+            std::cerr << "fclose #" << *close_count << " on " << f << "\n";
+        }
+    }
+};
 
 // TODO Part 2.2: define the using-alias.
-// using CountedFilePtr = std::unique_ptr<FILE, CountingFileCloser>;
+using CountedFilePtr = std::unique_ptr<FILE, CountingFileCloser>;
 
 // TODO Part 2.3: implement the factory. The deleter instance must be constructed
 //                with a pointer to the caller's counter.
-// CountedFilePtr open_counted(const char* path, const char* mode, int& counter) {
-//     FILE* raw = std::fopen(path, mode);
-//     if (!raw) throw std::runtime_error("fopen failed");
-//     return CountedFilePtr(raw, CountingFileCloser{&counter});
-// }
+CountedFilePtr open_counted(const char* path, const char* mode, int& counter) {
+    FILE* raw = std::fopen(path, mode);
+    if (!raw) throw std::runtime_error("fopen failed");
+    return CountedFilePtr(raw, CountingFileCloser{&counter});
+}
 
 // ─── Part 2 main ────────────────────────────────────────────────────────────
-/*
+// /*
 int main() {
     std::cerr << "=== Part 2: stateful counting deleter ===\n";
 
@@ -185,13 +189,13 @@ int main() {
 
     return 0;
 }
-*/
+// */
 
 // ─── Placeholder main — uncomment Part 1 or Part 2 above ────────────────────
-int main() {
-    std::cerr << "Uncomment Part 1 or Part 2 main() and recompile.\n";
-    return 0;
-}
+// int main() {
+//     std::cerr << "Uncomment Part 1 or Part 2 main() and recompile.\n";
+//     return 0;
+// }
 
 // =============================================================================
 // EXPECTED OUTPUT (after both parts are uncommented and the TODOs are filled in)
