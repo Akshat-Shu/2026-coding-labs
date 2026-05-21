@@ -58,11 +58,14 @@ cs106l::unique_ptr<ListNode<T>> create_list(const std::vector<T>& values) {
   if (values.empty())
     return nullptr;
 
-  auto head = cs106l::make_unique<ListNode<T>>(values[0]);
-  ListNode<T>* current = head.get();
-  for (size_t i = 1; i < values.size(); ++i) {
-    current->next = cs106l::make_unique<ListNode<T>>(values[i]);
-    current = current->next.get();
+  cs106l::unique_ptr head;
+
+  for(int i = values.size()-1; i >= 0; i--) {
+    cs106l::unique_ptr<T> current_node = cs106l::make_unique<T>(values[i]);
+    
+    current_node->next = std::move(head);
+
+    head = std::move(current_node);
   }
 
   return head;
