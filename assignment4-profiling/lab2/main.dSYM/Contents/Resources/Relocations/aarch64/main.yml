@@ -1,0 +1,12 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     main
+relocations:
+  - { offset: 0x6B89, size: 0x8, addend: 0x0, symName: __ZStL8__ioinit, symObjAddr: 0x2A502, symBinAddr: 0x100008000, symSize: 0x0 }
+  - { offset: 0x6F34, size: 0x8, addend: 0x0, symName: __GLOBAL__sub_I_main.cpp, symObjAddr: 0x760, symBinAddr: 0x100000860, symSize: 0x38 }
+  - { offset: 0x6F4B, size: 0x8, addend: 0x0, symName: __GLOBAL__sub_I_main.cpp, symObjAddr: 0x760, symBinAddr: 0x100000860, symSize: 0x38 }
+  - { offset: 0x7AC1, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x100, symBinAddr: 0x1000008A0, symSize: 0x62C }
+  - { offset: 0x8F92, size: 0x8, addend: 0x0, symName: __ZNSt12_Vector_baseIiSaIiEED2Ev.isra.0, symObjAddr: 0x0, symBinAddr: 0x1000007A0, symSize: 0x10 }
+  - { offset: 0x8FB0, size: 0x8, addend: 0x0, symName: __ZNSt12_Vector_baseIiSaIiEED2Ev.isra.0, symObjAddr: 0x0, symBinAddr: 0x1000007A0, symSize: 0x10 }
+  - { offset: 0x90A9, size: 0x8, addend: 0x0, symName: __ZNSt6vectorIiSaIiEEC1EmRKS0_.isra.0, symObjAddr: 0x10, symBinAddr: 0x1000007B0, symSize: 0xA4 }
+...
