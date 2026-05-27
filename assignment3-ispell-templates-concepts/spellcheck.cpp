@@ -8,7 +8,7 @@
 #include <vector>
 
 template <typename Iterator, typename UnaryPred>
-
+requires std::input_iterator<Iterator> && std::indirect_unary_predicate<UnaryPred, Iterator>
 std::vector<Iterator> find_all(Iterator begin, Iterator end, UnaryPred pred);
 
 Corpus tokenize(std::string &source)
