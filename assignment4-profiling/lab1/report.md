@@ -18,6 +18,8 @@
 
 8. Shrank the `distance` element type from `int` (4 bytes) to `uint16_t` (2 bytes). Max BFS distance on a 260×260 grid is bounded by `~rows + cols ≈ 520`, well under `uint16_t`'s max of `65535`. Halves the distance array's memory footprint (from ~270 KB to ~135 KB), which means fewer L1/L2 misses and a smaller memset each call. The sentinel `-1` cast to `uint16_t` becomes `0xFFFF`, so the "not visited" check became `distance[i] != static_cast<uint16_t>(-1)`.
 
+9. Changed `frontier` from `vector<Point>` (8 bytes per entry) to `vector<int>` (4 bytes per entry), storing the flat index `row * cols + col` directly. Halves the frontier's size — for a 260×260 grid that's ~540 KB → ~270 KB, again less cache pressure and a smaller per-call allocation. Recovering `row`/`col` from the index when popping uses one division and a multiply-subtract (`current_col = current_index - current_row * cols`), which the compiler turns into a multiply-by-magic-number for div-by-constant.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -129,6 +131,17 @@ time_sec = 0.691912
 
 Small but free win. The bigger story here is the next two changes, both about that distance array being recreated per BFS call.
 
+Same logic applied to `frontier`. It was a `vector<Point>` (two ints per entry, 8 bytes), but a flat index encodes the same thing in 4 bytes. Swapped it to `vector<int>` and pushed `row * cols + col` directly. Popping now recovers row/col with one divide and one multiply-subtract, which the compiler folds into magic-number multiplies for div-by-constant — cheap. After:
+
+```
+time_sec = 0.61071
+       0.611233593 seconds time elapsed
+       0.607350000 seconds user
+       0.003989000 seconds sys
+```
+
+Another ~80ms. The frontier was about as big as `distance` was before shrinking it, so the saving is comparable.
+
 ### Before — baseline
 
 ```
@@ -143,10 +156,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 0.691912
-       0.693691900 seconds time elapsed
-       0.691605000 seconds user
-       0.001998000 seconds sys
+time_sec = 0.61071
+       0.611233593 seconds time elapsed
+       0.607350000 seconds user
+       0.003989000 seconds sys
 ```
 
 
