@@ -327,16 +327,9 @@ int next_pressure_value(int center, int north, int south, int west, int east,
     int pulse = (row - col - 3 * pass) & 15;
     int pressure = ((center << 1) + north + south + west + east + source + pulse) >> 3;
 
-    if (((center + row + pass) & 7) != 0) {
-        pressure += center & 3;
-    } else {
-        pressure = (pressure >> 1) + source;
-    }
-
-    if (pressure > 8191) {
-        pressure = 8191;
-    }
-    return pressure;
+    int sel  = (((center + row + pass) & 7) == 0);
+    pressure = sel ? (pressure >> 1) + source : pressure + (center & 3);
+    return pressure > 8191 ? 8191 : pressure;
 }
 
 /**

@@ -4,7 +4,9 @@
 
 1. Rewrote the math in `next_pressure_value`. Pulse is now `(row - col - 3*pass) & 15` instead of `(row*17 + col*31 + pass*13) & 15` — same result mod 16, one multiply instead of three. Also swapped `*2`, `/8`, `/2` for `<<1`, `>>3`, `>>1`, and changed `heatmap[i] / 8` to `heatmap[i] >> 3` in `compute_congestion_pressure`. Divides showed up as the per-line hotspot in KCachegrind's annotation of `next_pressure_value`.
 
-2. Flipped the `if (((center + row + pass) & 7) == 0)` in `next_pressure_value` to `!= 0` and swapped the two arms, so the common case (7/8 of iterations) is the immediate branch. The idea was to help the branch predictor and keep the hot path in line with the fall-through. In practice the impact was within noise on this run, but the code reads more naturally with the common case first.
+2. Flipped the `if (((center + row + pass) & 7) == 0)` in `next_pressure_value` to `!= 0` and swapped the two arms, so the common case (7/8 of iterations) is the immediate branch. The hot path now follows the fall-through, which is easier on the predictor and the i-cache. Small but real win on the timing.
+
+3. Replaced the if/else in `next_pressure_value` with a ternary, so the compiler can lower it to a `cmov` instead of a branch. Two reasons: the branch is data-dependent on `center`, so the predictor can't really learn it; and removing the branch is a prerequisite for auto-vectorizing the surrounding loop later.
 
 ## 2. Methodology Walkthrough
 
@@ -24,24 +26,35 @@ Next I did `perf record` + flamegraph. Two big chunks: the BFS region and an eve
 After the rewrite, the same run looks like this:
 
 ```
-time_sec ≈ 1.49
-       1.497640934 seconds time elapsed
-       1.489401000 seconds user
-       0.005993000 seconds sys
-```
-
-Down ~30%. Output checksums match the original, so the bit-twiddling didn't change the result.
-
-Next I tried flipping the branch in the same function — the `& 7 == 0` case only fires 1 in 8, so making the common path the `if` arm should give the predictor an easier time. Re-timing afterwards:
-
-```
 time_sec = 1.54161
        1.545234753 seconds time elapsed
        1.539794000 seconds user
        0.003999000 seconds sys
 ```
 
-Within noise of the previous run. Either the compiler was already laying out the branch favorably, or this workload doesn't churn the predictor enough for it to matter. Kept the change anyway — it costs nothing and reads more clearly with the common case on top.
+Down from ~2.16s to ~1.54s. Output checksums match the original, so the bit-twiddling didn't change the result.
+
+Next I tried flipping the branch in the same function — the `& 7 == 0` case only fires 1 in 8, so making the common path the `if` arm should give the predictor an easier time. After:
+
+```
+time_sec ≈ 1.49
+       1.497640934 seconds time elapsed
+       1.489401000 seconds user
+       0.005993000 seconds sys
+```
+
+Small but real — about 50ms off, consistent with the branch being predicted slightly better when the hot arm is the fall-through.
+
+Then I went branchless — same logic, but as a ternary. The point isn't really branch prediction for this workload (small effect) but to let the compiler lower it to `cmov` and, more importantly, open the door to vectorizing the loop later. A loop body with a data-dependent branch won't vectorize. After the ternary:
+
+```
+time_sec = 1.45655
+       1.459196375 seconds time elapsed
+       1.455199000 seconds user
+       0.002998000 seconds sys
+```
+
+Modest gain. The real reason for this change shows up later.
 
 ### Before — baseline
 
@@ -57,10 +70,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 1.54161
-       1.545234753 seconds time elapsed
-       1.539794000 seconds user
-       0.003999000 seconds sys
+time_sec = 1.45655
+       1.459196375 seconds time elapsed
+       1.455199000 seconds user
+       0.002998000 seconds sys
 ```
 
 
