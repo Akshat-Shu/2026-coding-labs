@@ -14,6 +14,8 @@
 
 6. Switched `distance` and `visited` in `shortest_path_bfs` from raw `new[]` pointers to `std::vector`. The original code leaked these on every call (no matching `delete[]`), which Valgrind's leak summary catches immediately. Same change also opens the door to passing them by reference and reusing them across calls later. Then removed the `if (next_row < 0 || next_row >= rows || ...)` bounds check inside the BFS direction loop. The generated grid is wrapped in `#` borders, and the existing `grid[next_row][next_col] == '#'` check rejects any step into the border without ever reading out of bounds — so the explicit four-way comparison is dead weight in every BFS iteration. Fixed the sanity-check grid in the process: it had been using open `.` borders, which only worked because the bounds check protected it; once the check was gone, the sanity grid needed `#` borders too to match the actual invariant.
 
+7. Dropped the `visited` vector entirely and used `distance[i] != -1` as the "already visited" check. The two arrays held the same information — `distance` is initialized to `-1`, and any cell ever enqueued gets a non-negative distance. One fewer array means one less random read per neighbor (4 per BFS step), one less cache line in the working set, and one less allocation per BFS call.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -103,6 +105,17 @@ time_sec = 0.839173
 
 ~100ms off, and the program is now leak-free.
 
+Staring at the BFS body afterwards, I noticed `visited` and `distance` were carrying the same signal. `distance[i] == -1` already means "unvisited", since every cell that gets enqueued is also assigned a distance in the same step. So `visited` was a redundant array — one extra load per neighbor, one extra write per enqueue, and one extra allocation+memset per BFS call. Dropped it. After:
+
+```
+time_sec = 0.72503
+       0.726612933 seconds time elapsed
+       0.723482000 seconds user
+       0.002997000 seconds sys
+```
+
+Another ~115ms off. The compound win from those two BFS changes is larger than the SIMD step.
+
 ### Before — baseline
 
 ```
@@ -117,10 +130,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 0.839173
-       0.843137869 seconds time elapsed
-       0.837856000 seconds user
-       0.002002000 seconds sys
+time_sec = 0.72503
+       0.726612933 seconds time elapsed
+       0.723482000 seconds user
+       0.002997000 seconds sys
 ```
 
 

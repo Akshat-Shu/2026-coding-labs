@@ -194,7 +194,6 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
     int total = rows * cols;
 
     vector<int> distance(total, -1);
-    vector<unsigned char> visited(total, 0);
     vector<Point> frontier(static_cast<size_t>(total));
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
@@ -202,7 +201,6 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
     int start_index = request.start.row * cols + request.start.col;
     int goal_index = request.goal.row * cols + request.goal.col;
 
-    visited[start_index] = 1;
     distance[start_index] = 0;
     heatmap[start_index] += 1;
     frontier[frontier_tail++] = request.start;
@@ -227,11 +225,10 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
             }
 
             int next_index = next_row * cols + next_col;
-            if (visited[next_index]) {
+            if (distance[next_index] != -1) {
                 continue;
             }
 
-            visited[next_index] = 1;
             distance[next_index] = distance[current_index] + 1;
             heatmap[next_index] += 1;
             frontier[frontier_tail++] = {next_row, next_col};
