@@ -184,12 +184,11 @@ uint64_t checksum_label(const string &label) {
  *
  * The function returns -1 when the goal cannot be reached.
  */
-int shortest_path_bfs(const char *grid, int rows, int cols,
-                      const RouteRequest &request,
+int shortest_path_bfs(int cols, const RouteRequest &request,
                       vector<uint16_t> &heatmap,
                       vector<uint16_t> &distance,
                       vector<int> &frontier) {
-    int total = rows * cols;
+    // int total = rows * cols;
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
 
@@ -213,7 +212,7 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
         for (int direction = 0; direction < 4; ++direction) {
             int next_index = current_index + offsets[direction];
 
-            // 0xFFFE = blocked or visited. Only 0xFFFF (open, unvisited) passes.
+            // -1 only when not visited and not blocked
             if (distance[next_index] != static_cast<uint16_t>(-1)) {
                 continue;
             }
@@ -224,11 +223,6 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
         }
     }
 
-
-    for (int i = 0; i < total; ++i) {
-        distance[i] = (grid[i] == '#') ? static_cast<uint16_t>(-2)
-                                       : static_cast<uint16_t>(-1);
-    }
     return result;
 }
 
@@ -247,20 +241,22 @@ RunSummary run_all_requests(const char *grid, int rows, int cols,
 
     // Encode "blocked" into the distance sentinel: 0xFFFE = blocked, 0xFFFF = open & unvisited.
     // BFS only needs to check `distance[i] != 0xFFFF` then — blocked and visited both fail.
-    for (int i = 0; i < total; ++i) {
-        distance_buf[i] = (grid[i] == '#') ? static_cast<uint16_t>(-2)
-                                           : static_cast<uint16_t>(-1);
-    }
 
     for (int i = 0; i < summary.requests; ++i) {
+        // suitable for vectorization
+        for (int j = 0; j < total; ++j) {
+            distance_buf[j] = (grid[j] == '#') ? static_cast<uint16_t>(-2)
+                                            : static_cast<uint16_t>(-1);
+        }
+
         const RouteRequest &request = requests[i];
         string route_label = format_route_label(request, i);
         summary.route_label_checksum ^= checksum_label(route_label);
 
-        int distance = shortest_path_bfs(grid, rows, cols, request, heatmap,
-                                         distance_buf, frontier_buf);
+        int distance = shortest_path_bfs(cols, request, heatmap,
+                            distance_buf, frontier_buf);
 
-        if (distance >= 0) {
+        if (distance != -1) {
             summary.reachable += 1;
             summary.total_distance += distance;
         } else {
@@ -460,9 +456,9 @@ bool run_sanity_check() {
     RouteRequest reachable{{1, 1}, {5, 5}};
     RouteRequest unreachable{{1, 1}, {2, 2}};
 
-    return shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, reachable, heatmap,
+    return shortest_path_bfs(sanity_cols, reachable, heatmap,
                              distance_buf, frontier_buf) == 8 &&
-           shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, unreachable, heatmap,
+           shortest_path_bfs(sanity_cols, unreachable, heatmap,
                              distance_buf, frontier_buf) == -1;
 }
 

@@ -1,10 +1,10 @@
 CXX := g++
 CXXFLAGS_BASE := -std=c++20 -Wall -Wextra -pedantic
-CXXFLAGS_RELEASE := $(CXXFLAGS_BASE) -O2 -g
+CXXFLAGS_RELEASE := $(CXXFLAGS_BASE) -O3 -g -march=native
 CXXFLAGS_DEBUG := $(CXXFLAGS_BASE) -O0 -g
-CXXFLAGS_PERF := $(CXXFLAGS_BASE) -O2 -g -fno-omit-frame-pointer
+CXXFLAGS_PERF := $(CXXFLAGS_BASE) -O3 -g -march=native -fno-omit-frame-pointer
 CXXFLAGS_GPROF := $(CXXFLAGS_BASE) -O0 -g -pg
-CXXFLAGS_OPTIMIZED := $(CXXFLAGS_BASE) -O3 -g
+CXXFLAGS_OPTIMIZED := $(CXXFLAGS_BASE) -O3 -g -march=native -funroll-loops
 
 TARGET := grid_bfs
 SOURCE := grid_bfs.cpp
@@ -43,11 +43,11 @@ clean:
 
 help:
 	@echo "Targets:"
-	@echo "  all        - build with -O2 -g"
+	@echo "  all        - build with -O3 -g -march=native"
 	@echo "  debug      - build with -O0 -g"
-	@echo "  perf       - build with frame pointers for perf call stacks"
+	@echo "  perf       - build with -O3 -g -march=native + frame pointers for perf call stacks"
 	@echo "  gprof      - build with -O0 -g -pg for gprof"
-	@echo "  optimized  - build with -O3 -g"
+	@echo "  optimized  - build with -O3 -g -march=native -funroll-loops"
 	@echo "  test       - run deterministic sanity check"
 	@echo "  benchmark  - time the fixed workload three times"
 	@echo "  clean      - remove binary and profiler outputs"
