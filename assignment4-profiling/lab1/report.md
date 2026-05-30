@@ -4,6 +4,8 @@
 
 1. Rewrote the math in `next_pressure_value`. Pulse is now `(row - col - 3*pass) & 15` instead of `(row*17 + col*31 + pass*13) & 15` — same result mod 16, one multiply instead of three. Also swapped `*2`, `/8`, `/2` for `<<1`, `>>3`, `>>1`, and changed `heatmap[i] / 8` to `heatmap[i] >> 3` in `compute_congestion_pressure`. Divides showed up as the per-line hotspot in KCachegrind's annotation of `next_pressure_value`.
 
+2. Flipped the `if (((center + row + pass) & 7) == 0)` in `next_pressure_value` to `!= 0` and swapped the two arms, so the common case (7/8 of iterations) is the immediate branch. The idea was to help the branch predictor and keep the hot path in line with the fall-through. In practice the impact was within noise on this run, but the code reads more naturally with the common case first.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -30,6 +32,17 @@ time_sec ≈ 1.49
 
 Down ~30%. Output checksums match the original, so the bit-twiddling didn't change the result.
 
+Next I tried flipping the branch in the same function — the `& 7 == 0` case only fires 1 in 8, so making the common path the `if` arm should give the predictor an easier time. Re-timing afterwards:
+
+```
+time_sec = 1.54161
+       1.545234753 seconds time elapsed
+       1.539794000 seconds user
+       0.003999000 seconds sys
+```
+
+Within noise of the previous run. Either the compiler was already laying out the branch favorably, or this workload doesn't churn the predictor enough for it to matter. Kept the change anyway — it costs nothing and reads more clearly with the common case on top.
+
 ### Before — baseline
 
 ```
@@ -44,10 +57,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec ≈ 1.49
-       1.497640934 seconds time elapsed
-       1.489401000 seconds user
-       0.005993000 seconds sys
+time_sec = 1.54161
+       1.545234753 seconds time elapsed
+       1.539794000 seconds user
+       0.003999000 seconds sys
 ```
 
 
