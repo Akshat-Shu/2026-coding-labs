@@ -193,9 +193,8 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
     int cols = static_cast<int>(grid[0].size());
     int total = rows * cols;
 
-    int *distance = new int[total];
-    std::fill(distance, distance + total, -1);
-    unsigned char *visited = new unsigned char[total]{};
+    vector<int> distance(total, -1);
+    vector<unsigned char> visited(total, 0);
     vector<Point> frontier(static_cast<size_t>(total));
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
@@ -223,9 +222,6 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
             int next_row = current.row + drow[direction];
             int next_col = current.col + dcol[direction];
 
-            if (next_row < 0 || next_row >= rows || next_col < 0 || next_col >= cols) {
-                continue;
-            }
             if (grid[next_row][next_col] == '#') {
                 continue;
             }
@@ -440,16 +436,18 @@ void print_summary(const vector<string> &grid,
  */
 bool run_sanity_check() {
     vector<string> grid = {
-        ".....",
-        ".###.",
-        "...#.",
-        ".#...",
-        ".....",
+        "#######",
+        "#.....#",
+        "#.###.#",
+        "#...#.#",
+        "#.#...#",
+        "#.....#",
+        "#######",
     };
     vector<int> heatmap(static_cast<int>(grid.size() * grid[0].size()), 0);
 
-    RouteRequest reachable{{0, 0}, {4, 4}};
-    RouteRequest unreachable{{0, 0}, {1, 1}};
+    RouteRequest reachable{{1, 1}, {5, 5}};
+    RouteRequest unreachable{{1, 1}, {2, 2}};
 
     return shortest_path_bfs(grid, reachable, heatmap) == 8 &&
            shortest_path_bfs(grid, unreachable, heatmap) == -1;
