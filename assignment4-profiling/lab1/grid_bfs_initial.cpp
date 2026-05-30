@@ -324,19 +324,16 @@ HeatmapSummary summarize_heatmap(const vector<int> &heatmap, int rows, int cols)
  */
 int next_pressure_value(int center, int north, int south, int west, int east,
                         int source, int row, int col, int pass) {
-    int pulse = (row - col - 3 * pass) & 15;
-    int pressure = ((center << 1) + north + south + west + east + source + pulse) >> 3;
+    int pulse = (row * 17 + col * 31 + pass * 13) & 15;
+    int pressure = (center * 2 + north + south + west + east + source + pulse) / 8;
 
     if (((center + row + pass) & 7) == 0) {
-        pressure = (pressure >> 1) + source;
+        pressure = pressure / 2 + source;
     } else {
         pressure += center & 3;
     }
 
-    if (pressure > 8191) {
-        pressure = 8191;
-    }
-    return pressure;
+    return min(pressure, 8191);
 }
 
 /**
@@ -354,7 +351,7 @@ CongestionSummary compute_congestion_pressure(const vector<int> &heatmap,
     vector<int> source(heatmap.size());
 
     for (size_t i = 0; i < heatmap.size(); ++i) {
-        source[i] = heatmap[i] >> 3;
+        source[i] = heatmap[i] / 8;
     }
 
     for (int pass = 0; pass < congestion_passes; ++pass) {

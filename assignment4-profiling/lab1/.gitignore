@@ -1,0 +1,5 @@
+*.txt
+build
+outputs
+grid_bfs_opt
+grid_bfs
