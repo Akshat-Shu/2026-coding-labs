@@ -24,6 +24,8 @@
 
 11. Replaced the `drow[4]` / `dcol[4]` arrays with a single `offsets[4] = {-cols, cols, -1, 1}` array. Now that the grid is a flat buffer, neighbor indices are just `current_index + offsets[direction]` — no need to recover `current_row`/`current_col` from the index, no per-neighbor `row * cols + col` multiply. The divide-by-`cols` and the multiply both go away, and the per-direction body shrinks to a single add.
 
+12. Hoisted `distance` and `frontier` out of `shortest_path_bfs` and into `run_all_requests`, passing them in by reference and reusing them across all 1200 BFS calls. Before, each BFS call allocated ~135 KB for `distance` and ~270 KB for `frontier`, then freed them — 1200 times per run, which `perf record` showed as a chunky region of `__memset_avx2_unaligned_erms` and allocator code. After, the buffers are allocated once. `frontier` doesn't need any reset because `frontier_head`/`frontier_tail` handle that. `distance` still needs `std::fill` back to the `-1` sentinel each call, but no allocation cost.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -172,6 +174,19 @@ time_sec = 0.646576
 
 Small recorded improvement on this run, but cleaner code that drops both the divide and the per-neighbor multiply.
 
+Last big chunk left on the callgrind was the per-call allocation in BFS. Every one of the 1200 `shortest_path_bfs` calls was allocating ~135 KB for `distance` and ~270 KB for `frontier`, memset-ing them, and freeing them on return. The subroutine cost of the BFS function was almost 25% of the total runtime, mostly in `__memset_avx2_unaligned_erms` and allocator code.
+
+Hoisted both buffers out to `run_all_requests` and passed them in by reference. `frontier` doesn't need any reset between calls — `frontier_head`/`frontier_tail` handle that. `distance` still needs to go back to `-1` each call, but only a `std::fill`, no allocation. After:
+
+```
+time_sec = 0.678469
+       0.681875613 seconds time elapsed
+       0.677138000 seconds user
+       0.003994000 seconds sys
+```
+
+End-to-end: started at ~2.16s, ended at ~0.68s. About 3.2× faster, all three checksums identical, no memory leaks.
+
 ### Before — baseline
 
 ```
@@ -183,19 +198,59 @@ time_sec = 2.16284
 
 Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions, `compute_congestion_pressure` at 19.99%.
 
-### After — current
+### After — final
 
 ```
-time_sec = 0.646576
-       0.650498330 seconds time elapsed
-       0.643005000 seconds user
-       0.005990000 seconds sys
+time_sec = 0.678469
+       0.681875613 seconds time elapsed
+       0.677138000 seconds user
+       0.003994000 seconds sys
 ```
+
+Same 1200 route requests, same 4096 congestion passes, same final checksums. ~3.2× faster end-to-end.
+
+Callgrind program totals on the final version: `shortest_path_bfs` at 43.04% of instructions (was 30.48%), `compute_congestion_pressure` at 17.64% (was 19.99%). The relative split changed because compute_congestion shrank faster than BFS in absolute terms — vectorization did its job. BFS now dominates the profile, but it's also dramatically cheaper than it used to be; what's left is the irreducible work of touching every reachable cell across 1200 searches.
 
 
 ## 3. Correctness Evidence
 
-`--test` still passes after each step. Checksums from the unmodified program vs the current version are compared at the end; through step 1 they match.
+`--test` passes after every step:
+
+```
+$ ./grid_bfs --test
+sanity check passed
+```
+
+Full normal run on the optimized binary:
+
+```
+grid = 260 x 260
+open_cells = 51260
+requests = 1200
+reachable = 1177
+unreachable = 23
+average_distance = 180.575
+route_label_checksum = 3703473789245134517
+heatmap_total_visits = 32914184
+heatmap_active_cells = 51041
+heatmap_max_visits = 957
+heatmap_threshold_checksum = 17645577948039157950
+congestion_passes = 4096
+congestion_total_pressure = 3719781
+congestion_max_pressure = 175
+congestion_pressure_checksum = 5595025244828244209
+time_sec = 0.584816
+```
+
+The three checksums (`route_label_checksum`, `heatmap_threshold_checksum`, `congestion_pressure_checksum`) are bit-identical to the unmodified program's checksums:
+
+| Checksum | Unmodified | Optimized |
+|---|---|---|
+| `route_label_checksum` | 3703473789245134517 | 3703473789245134517 |
+| `heatmap_threshold_checksum` | 17645577948039157950 | 17645577948039157950 |
+| `congestion_pressure_checksum` | 5595025244828244209 | 5595025244828244209 |
+
+Valgrind on the optimized build reports `definitely lost: 0 bytes in 0 blocks`. The original program leaked ~8 MB worth of `distance` and `visited` blocks per run (one pair per BFS call); converting those raw `new[]` allocations to `std::vector` in step 6 fixed the leak, and the hoist in step 12 means there are now only two allocations for the BFS buffers across the entire program, both freed cleanly at scope exit.
 
 ## 4. Conceptual Questions
 

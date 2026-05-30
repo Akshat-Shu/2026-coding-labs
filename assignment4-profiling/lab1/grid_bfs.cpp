@@ -186,11 +186,11 @@ uint64_t checksum_label(const string &label) {
  */
 int shortest_path_bfs(const char *grid, int rows, int cols,
                       const RouteRequest &request,
-                      vector<int> &heatmap) {
+                      vector<int> &heatmap,
+                      vector<uint16_t> &distance,
+                      vector<int> &frontier) {
     int total = rows * cols;
-
-    vector<uint16_t> distance(total, static_cast<uint16_t>(-1));
-    vector<int> frontier(static_cast<size_t>(total));
+    fill(distance.begin(), distance.begin() + total, static_cast<uint16_t>(-1));
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
 
@@ -238,12 +238,17 @@ RunSummary run_all_requests(const char *grid, int rows, int cols,
     RunSummary summary;
     summary.requests = static_cast<int>(requests.size());
 
+    int total = rows * cols;
+    vector<uint16_t> distance_buf(total);
+    vector<int> frontier_buf(total);
+
     for (int i = 0; i < summary.requests; ++i) {
         const RouteRequest &request = requests[i];
         string route_label = format_route_label(request, i);
         summary.route_label_checksum ^= checksum_label(route_label);
 
-        int distance = shortest_path_bfs(grid, rows, cols, request, heatmap);
+        int distance = shortest_path_bfs(grid, rows, cols, request, heatmap,
+                                         distance_buf, frontier_buf);
 
         if (distance >= 0) {
             summary.reachable += 1;
@@ -434,12 +439,16 @@ bool run_sanity_check() {
         '#','#','#','#','#','#','#',
     };
     vector<int> heatmap(sanity_rows * sanity_cols, 0);
+    vector<uint16_t> distance_buf(sanity_rows * sanity_cols);
+    vector<int> frontier_buf(sanity_rows * sanity_cols);
 
     RouteRequest reachable{{1, 1}, {5, 5}};
     RouteRequest unreachable{{1, 1}, {2, 2}};
 
-    return shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, reachable, heatmap) == 8 &&
-           shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, unreachable, heatmap) == -1;
+    return shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, reachable, heatmap,
+                             distance_buf, frontier_buf) == 8 &&
+           shortest_path_bfs(sanity_grid, sanity_rows, sanity_cols, unreachable, heatmap,
+                             distance_buf, frontier_buf) == -1;
 }
 
 /**
