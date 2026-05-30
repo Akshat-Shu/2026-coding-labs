@@ -16,6 +16,8 @@
 
 7. Dropped the `visited` vector entirely and used `distance[i] != -1` as the "already visited" check. The two arrays held the same information — `distance` is initialized to `-1`, and any cell ever enqueued gets a non-negative distance. One fewer array means one less random read per neighbor (4 per BFS step), one less cache line in the working set, and one less allocation per BFS call.
 
+8. Shrank the `distance` element type from `int` (4 bytes) to `uint16_t` (2 bytes). Max BFS distance on a 260×260 grid is bounded by `~rows + cols ≈ 520`, well under `uint16_t`'s max of `65535`. Halves the distance array's memory footprint (from ~270 KB to ~135 KB), which means fewer L1/L2 misses and a smaller memset each call. The sentinel `-1` cast to `uint16_t` becomes `0xFFFF`, so the "not visited" check became `distance[i] != static_cast<uint16_t>(-1)`.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -116,6 +118,17 @@ time_sec = 0.72503
 
 Another ~115ms off. The compound win from those two BFS changes is larger than the SIMD step.
 
+Same idea, smaller scale: `distance` was a `vector<int>` (4 bytes per cell), but the largest BFS distance on the workload's grid is bounded by `~rows + cols`, so it fits comfortably in a `uint16_t` (2 bytes). Swapping the element type cuts the array from ~270 KB to ~135 KB — less cache pressure, smaller per-call memset. Had to be careful with the sentinel: `-1` cast to `uint16_t` is `0xFFFF`, so the check now reads `distance[i] != static_cast<uint16_t>(-1)`. After:
+
+```
+time_sec = 0.691912
+       0.693691900 seconds time elapsed
+       0.691605000 seconds user
+       0.001998000 seconds sys
+```
+
+Small but free win. The bigger story here is the next two changes, both about that distance array being recreated per BFS call.
+
 ### Before — baseline
 
 ```
@@ -130,10 +143,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 0.72503
-       0.726612933 seconds time elapsed
-       0.723482000 seconds user
-       0.002997000 seconds sys
+time_sec = 0.691912
+       0.693691900 seconds time elapsed
+       0.691605000 seconds user
+       0.001998000 seconds sys
 ```
 
 

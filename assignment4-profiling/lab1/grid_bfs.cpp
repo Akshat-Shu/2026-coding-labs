@@ -193,7 +193,7 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
     int cols = static_cast<int>(grid[0].size());
     int total = rows * cols;
 
-    vector<int> distance(total, -1);
+    vector<uint16_t> distance(total, static_cast<uint16_t>(-1));
     vector<Point> frontier(static_cast<size_t>(total));
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
@@ -225,7 +225,7 @@ int shortest_path_bfs(const vector<string> &grid, const RouteRequest &request,
             }
 
             int next_index = next_row * cols + next_col;
-            if (distance[next_index] != -1) {
+            if (distance[next_index] != static_cast<uint16_t>(-1)) {
                 continue;
             }
 
