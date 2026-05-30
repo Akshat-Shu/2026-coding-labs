@@ -351,18 +351,22 @@ CongestionSummary compute_congestion_pressure(const vector<int> &heatmap,
     }
 
     for (int pass = 0; pass < congestion_passes; ++pass) {
+        const int* __restrict__ cur_data = current.data();
+        const int* __restrict__ src_data = source.data();
+        int*       __restrict__ nxt_data = next.data();
+
         for (int row = 1; row < rows - 1; ++row) {
             for (int col = 1; col < cols - 1; ++col) {
                 int index = row * cols + col;
 
-                int center = current[index];
-                int north = current[index - cols];
-                int south = current[index + cols];
-                int west = current[index - 1];
-                int east = current[index + 1];
+                int center = cur_data[index];
+                int north = cur_data[index - cols];
+                int south = cur_data[index + cols];
+                int west = cur_data[index - 1];
+                int east = cur_data[index + 1];
 
-                next[index] = next_pressure_value(center, north, south, west, east,
-                                                  source[index], row, col, pass);
+                nxt_data[index] = next_pressure_value(center, north, south, west, east,
+                                                     src_data[index], row, col, pass);
             }
         }
 

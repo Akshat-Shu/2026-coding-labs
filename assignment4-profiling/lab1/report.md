@@ -10,6 +10,8 @@
 
 4. Swapped the loop nesting in `compute_congestion_pressure`. Was `for col { for row { ... } }`, now `for row { for col { ... } }`. The grid is row-major (`index = row * cols + col`), so the inner loop now walks contiguous memory instead of jumping by `cols * sizeof(int)` per iteration. The README hints at this — it says the inner loops "intentionally walk a row-major array in column-major order to create a cache-locality problem for students to find".
 
+5. Hoisted `current.data()`, `next.data()`, `source.data()` into local `const int* __restrict__` / `int* __restrict__` pointers above the row loop. The `__restrict__` tells the compiler the three buffers don't alias, which is what was blocking auto-vectorization. Confirmed by running with `-fopt-info-vec-all` — before this change the col loop reported "would need a runtime alias check" and failed to vectorize; after, the same loop reports "loop vectorized using 32 byte vectors" once the build flag is `-O3 -march=native`. Also switched the build to `-O3 -march=native` for this step, because `-O2`'s vectorization cost model is conservative and skips even when it could vectorize cleanly.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -69,6 +71,23 @@ time_sec = 1.38238
 
 About 80ms off, and the L1 D-cache miss rate dropped noticeably in `perf stat`.
 
+Now the inner column loop is contiguous, branchless, and the buffers don't alias each other — every prerequisite for SIMD is in place. So I hoisted `current.data()`, `next.data()`, `source.data()` into `__restrict__`-qualified raw pointers and rebuilt with `-O3 -march=native -fno-omit-frame-pointer`. The vectorization report was the confirmation I wanted:
+
+```
+grid_bfs.cpp:<col loop>: optimized: loop vectorized using 32 byte vectors
+```
+
+32-byte vectors means AVX2 (8 ints per iteration). Timing:
+
+```
+time_sec = 0.939109
+       0.940640671 seconds time elapsed
+       0.936336000 seconds user
+       0.002002000 seconds sys
+```
+
+Big drop — about 30% off the previous step. Worth noting: at `-O2` this same change barely moved the needle. The `__restrict__` removed the aliasing blocker but `-O2`'s cost model still passed on vectorizing the loop. `-O3` (or specifically `-O3` + `-ftree-loop-vectorize` priced more aggressively) is what actually crossed the threshold.
+
 ### Before — baseline
 
 ```
@@ -83,10 +102,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 1.38238
-       1.383613469 seconds time elapsed
-       1.380458000 seconds user
-       0.002000000 seconds sys
+time_sec = 0.939109
+       0.940640671 seconds time elapsed
+       0.936336000 seconds user
+       0.002002000 seconds sys
 ```
 
 
