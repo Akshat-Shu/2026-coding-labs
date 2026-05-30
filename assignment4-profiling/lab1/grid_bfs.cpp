@@ -201,8 +201,7 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
     heatmap[start_index] += 1;
     frontier[frontier_tail++] = start_index;
 
-    const int drow[4] = {-1, 1, 0, 0};
-    const int dcol[4] = {0, 0, -1, 1};
+    const int offsets[4] = {-cols, cols, -1, 1};
 
     while (frontier_head < frontier_tail) {
         int current_index = frontier[frontier_head++];
@@ -210,14 +209,9 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
             return distance[current_index];
         }
 
-        int current_row = current_index / cols;
-        int current_col = current_index - current_row * cols;
-
         for (int direction = 0; direction < 4; ++direction) {
-            int next_row = current_row + drow[direction];
-            int next_col = current_col + dcol[direction];
+            int next_index = current_index + offsets[direction];
 
-            int next_index = next_row * cols + next_col;
             if (grid[next_index] == '#') {
                 continue;
             }

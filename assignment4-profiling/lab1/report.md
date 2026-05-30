@@ -22,6 +22,8 @@
 
 10. Flattened the grid from `vector<string>` (a vector of separately heap-allocated string objects) to a single `static std::array<char, kRows * kCols>` declared inside `main`. The `static` keyword gives static storage duration without making the variable global, and the buffer lives in BSS — zero-initialized once at program start and contiguous in memory. Switched every function that consumed the grid to take `const char *grid, int rows, int cols` and index by `grid[row * cols + col]`. Eliminated the double pointer-chase per cell read (`vector<string>` → `string::data()` → `data[col]`) that was responsible for a huge fraction of the program's L1 cache misses. Also updated the sanity-check grid to use the same flat layout.
 
+11. Replaced the `drow[4]` / `dcol[4]` arrays with a single `offsets[4] = {-cols, cols, -1, 1}` array. Now that the grid is a flat buffer, neighbor indices are just `current_index + offsets[direction]` — no need to recover `current_row`/`current_col` from the index, no per-neighbor `row * cols + col` multiply. The divide-by-`cols` and the multiply both go away, and the per-direction body shrinks to a single add.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -159,6 +161,17 @@ time_sec = 0.659316
 
 Wall-clock moved less than I expected, but the L1 D-cache miss count dropped by about 30% in `perf stat`, which is the real story — the program is doing the same amount of work but with much better cache behavior. Wall-clock will improve further once the BFS gets reused buffers later.
 
+With the grid flat, `grid[next_index]` just needs `next_index` — there's no reason to keep computing `next_row`/`next_col` at all. Replaced the `drow[4]` / `dcol[4]` pair with a single `offsets[4] = {-cols, cols, -1, 1}` and dropped the `current_index / cols` and `current_index - current_row * cols` recovery code that step 9 had introduced. Each direction is now one add. After:
+
+```
+time_sec = 0.646576
+       0.650498330 seconds time elapsed
+       0.643005000 seconds user
+       0.005990000 seconds sys
+```
+
+Small recorded improvement on this run, but cleaner code that drops both the divide and the per-neighbor multiply.
+
 ### Before — baseline
 
 ```
@@ -173,10 +186,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 0.659316
-       0.660938916 seconds time elapsed
-       0.658858000 seconds user
-       0.000999000 seconds sys
+time_sec = 0.646576
+       0.650498330 seconds time elapsed
+       0.643005000 seconds user
+       0.005990000 seconds sys
 ```
 
 
