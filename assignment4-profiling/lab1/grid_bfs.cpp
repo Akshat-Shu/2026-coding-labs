@@ -186,7 +186,7 @@ uint64_t checksum_label(const string &label) {
  */
 int shortest_path_bfs(const char *grid, int rows, int cols,
                       const RouteRequest &request,
-                      vector<int> &heatmap,
+                      vector<uint16_t> &heatmap,
                       vector<uint16_t> &distance,
                       vector<int> &frontier) {
     int total = rows * cols;
@@ -234,7 +234,7 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
  */
 RunSummary run_all_requests(const char *grid, int rows, int cols,
                             const vector<RouteRequest> &requests,
-                            vector<int> &heatmap) {
+                            vector<uint16_t> &heatmap) {
     RunSummary summary;
     summary.requests = static_cast<int>(requests.size());
 
@@ -267,12 +267,12 @@ RunSummary run_all_requests(const char *grid, int rows, int cols,
  * The function computes basic totals and a cumulative visit-distribution
  * checksum that the final report can print.
  */
-HeatmapSummary summarize_heatmap(const vector<int> &heatmap, int rows, int cols) {
+HeatmapSummary summarize_heatmap(const vector<uint16_t> &heatmap, int rows, int cols) {
     HeatmapSummary summary;
     array<int, kRequestCount + 1> visit_counts{};
 
     for (int row = 0; row < rows; ++row) {
-        int row_offset = row * cols;
+        const int row_offset = row * cols;
         for (int col = 0; col < cols; ++col) {
             int visits = heatmap[row_offset + col];
             summary.total_visits += visits;
@@ -321,47 +321,7 @@ inline int next_pressure_value(int center, int north, int south, int west, int e
     return pressure > 8191 ? 8191 : pressure;
 }
 
-/**
- * Evolve the raw visit heatmap into a congestion-pressure map.
- *
- * Each pass depends on the previous pass, so the outer loop represents real
- * iterative work. The inner loops intentionally walk a row-major array in
- * column-major order to create a cache-locality problem for students to find.
- */
-CongestionSummary compute_congestion_pressure(const vector<int> &heatmap,
-                                              int rows, int cols,
-                                              int congestion_passes) {
-    vector<int> current = heatmap;
-    vector<int> next = heatmap;
-    vector<int> source(heatmap.size());
-
-    for (size_t i = 0; i < heatmap.size(); ++i) {
-        source[i] = heatmap[i] >> 3;
-    }
-
-    for (int pass = 0; pass < congestion_passes; ++pass) {
-        const int* __restrict__ cur_data = current.data();
-        const int* __restrict__ src_data = source.data();
-        int*       __restrict__ nxt_data = next.data();
-
-        for (int row = 1; row < rows - 1; ++row) {
-            for (int col = 1; col < cols - 1; ++col) {
-                int index = row * cols + col;
-
-                int center = cur_data[index];
-                int north = cur_data[index - cols];
-                int south = cur_data[index + cols];
-                int west = cur_data[index - 1];
-                int east = cur_data[index + 1];
-
-                nxt_data[index] = next_pressure_value(center, north, south, west, east,
-                                                     src_data[index], row, col, pass);
-            }
-        }
-
-        current.swap(next);
-    }
-
+__attribute__((always_inline)) inline CongestionSummary generate_congestion_summary(const vector<int>& current) {
     CongestionSummary summary;
     for (int value : current) {
         summary.total_pressure += value;
@@ -373,6 +333,46 @@ CongestionSummary compute_congestion_pressure(const vector<int> &heatmap,
     }
 
     return summary;
+}
+
+/**
+ * Evolve the raw visit heatmap into a congestion-pressure map.
+ *
+ * Each pass depends on the previous pass, so the outer loop represents real
+ * iterative work. The inner loops intentionally walk a row-major array in
+ * column-major order to create a cache-locality problem for students to find.
+ */
+CongestionSummary compute_congestion_pressure(const vector<uint16_t> &heatmap,
+                                              int rows, int cols,
+                                              int congestion_passes) {
+    vector<int> current(heatmap.begin(), heatmap.end());
+    vector<int> next(heatmap.begin(), heatmap.end());
+
+    for (int pass = 0; pass < congestion_passes; ++pass) {
+        const int*      __restrict__ cur_data = current.data();
+        const uint16_t* __restrict__ src_data = heatmap.data();
+        int*            __restrict__ nxt_data = next.data();
+
+        for (int row = 1; row < rows - 1; ++row) {
+            const int row_offset = row * cols;
+            for (int col = 1; col < cols - 1; ++col) {
+                int index = row_offset + col;
+
+                int center = cur_data[index];
+                int north = cur_data[index - cols];
+                int south = cur_data[index + cols];
+                int west = cur_data[index - 1];
+                int east = cur_data[index + 1];
+
+                nxt_data[index] = next_pressure_value(center, north, south, west, east,
+                                                     src_data[index] >> 3, row, col, pass);
+            }
+        }
+
+        current.swap(next);
+    }
+
+    return generate_congestion_summary(current);
 }
 
 /**
@@ -438,7 +438,7 @@ bool run_sanity_check() {
         '#','.','.','.','.','.','#',
         '#','#','#','#','#','#','#',
     };
-    vector<int> heatmap(sanity_rows * sanity_cols, 0);
+    vector<uint16_t> heatmap(sanity_rows * sanity_cols, 0);
     vector<uint16_t> distance_buf(sanity_rows * sanity_cols);
     vector<int> frontier_buf(sanity_rows * sanity_cols);
 
@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
     static std::array<char, kRows * kCols> grid;
     generate_grid(grid.data(), kRows, kCols);
     vector<RouteRequest> requests = generate_requests(grid.data(), kRows, kCols, request_count);
-    vector<int> heatmap(kRows * kCols, 0);
+    vector<uint16_t> heatmap(kRows * kCols, 0);
     RunSummary summary = run_all_requests(grid.data(), kRows, kCols, requests, heatmap);
     HeatmapSummary heatmap_summary = summarize_heatmap(heatmap, kRows, kCols);
     CongestionSummary congestion_summary =

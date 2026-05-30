@@ -26,6 +26,10 @@
 
 12. Hoisted `distance` and `frontier` out of `shortest_path_bfs` and into `run_all_requests`, passing them in by reference and reusing them across all 1200 BFS calls. Before, each BFS call allocated ~135 KB for `distance` and ~270 KB for `frontier`, then freed them — 1200 times per run, which `perf record` showed as a chunky region of `__memset_avx2_unaligned_erms` and allocator code. After, the buffers are allocated once. `frontier` doesn't need any reset because `frontier_head`/`frontier_tail` handle that. `distance` still needs `std::fill` back to the `-1` sentinel each call, but no allocation cost.
 
+13. Shrank `heatmap` from `vector<int>` to `vector<uint16_t>`. Same idea as the `distance` shrink earlier — max visits in this workload is 957 (visible in the output as `heatmap_max_visits`), so 16 bits is plenty. Halves the heatmap's memory footprint from ~270 KB to ~135 KB. The biggest immediate win is line 224 (`heatmap[next_index] += 1`) in BFS, which Callgrind had flagged as the single largest L1 write-miss line (~32% of all D1 write misses) — that 2-byte RMW per cell is now half as much memory traffic. Also touched `summarize_heatmap`, `compute_congestion_pressure`, and `main` to take/pass `vector<uint16_t>`.
+
+14. Removed the `source` vector in `compute_congestion_pressure`. It was a precomputed copy of `heatmap >> 3` that the inner loop read once per cell. Replaced it with reading `heatmap[index] >> 3` directly inside the loop. Saves the 270 KB allocation, removes the init pass over all 67,600 cells, and the inner loop now reads 2 bytes per cell from `heatmap` (uint16_t after step 13) instead of 4 bytes per cell from `source` (int). Vectorization survives — the col loop still reports "loop vectorized using 32 byte vectors" under `-fopt-info-vec` after the change.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -187,6 +191,16 @@ time_sec = 0.678469
 
 End-to-end: started at ~2.16s, ended at ~0.68s. About 3.2× faster, all three checksums identical, no memory leaks.
 
+Two more passes after that, both motivated by the next callgrind pass on the now-fast binary. The single hottest L1 write-miss line in the BFS hot loop was still `heatmap[next_index] += 1` — about 32% of all D1 write misses came from that one statement. `heatmap` was a `vector<int>`, and the max value seen anywhere in the workload is 957, so 16 bits is more than enough. Shrunk `heatmap` to `vector<uint16_t>`. Touched a handful of signatures (`shortest_path_bfs`, `run_all_requests`, `summarize_heatmap`, `compute_congestion_pressure`, `main`, plus the sanity check) but no semantic change. The same line in BFS now does a 2-byte RMW instead of 4, and `compute_congestion_pressure` reads half as many bytes when it pulls source values.
+
+While I was inside `compute_congestion_pressure`, the `source` vector also looked redundant. It was a precomputed copy of `heatmap >> 3` that the inner loop read once per cell. Replaced it with `heatmap[index] >> 3` inline — saves the 270 KB allocation, the init pass over all 67,600 cells, and (combined with the `uint16_t` shrink) drops the source read from 4 bytes to 2 bytes per cell. The col loop still vectorizes as 32-byte AVX2 vectors after the change, confirmed via `-fopt-info-vec`. After both:
+
+```
+time_sec ≈ 0.71
+```
+
+Wall-clock barely moved (the inner loop is dominated by the five `cur_data` reads, not the one source read), but the memory footprint is meaningfully smaller and the code is a step cleaner — one fewer buffer to allocate and reason about.
+
 ### Before — baseline
 
 ```
@@ -201,15 +215,12 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — final
 
 ```
-time_sec = 0.678469
-       0.681875613 seconds time elapsed
-       0.677138000 seconds user
-       0.003994000 seconds sys
+time_sec ≈ 0.71
 ```
 
-Same 1200 route requests, same 4096 congestion passes, same final checksums. ~3.2× faster end-to-end.
+Same 1200 route requests, same 4096 congestion passes, same final checksums. ~3× faster end-to-end.
 
-Callgrind program totals on the final version: `shortest_path_bfs` at 43.04% of instructions (was 30.48%), `compute_congestion_pressure` at 17.64% (was 19.99%). The relative split changed because compute_congestion shrank faster than BFS in absolute terms — vectorization did its job. BFS now dominates the profile, but it's also dramatically cheaper than it used to be; what's left is the irreducible work of touching every reachable cell across 1200 searches.
+Callgrind program totals on the final version: `shortest_path_bfs` at 43.04% of instructions (was 30.48%), `compute_congestion_pressure` at 17.64% (was 19.99%). The relative split changed because `compute_congestion_pressure` shrank faster than BFS in absolute terms — vectorization did its job. BFS now dominates the profile, but it's also dramatically cheaper than it used to be; what's left is the irreducible work of touching every reachable cell across 1200 searches. Memory footprint is also smaller: `heatmap` shrunk in half, and `compute_congestion_pressure` no longer allocates a separate `source` buffer.
 
 
 ## 3. Correctness Evidence
