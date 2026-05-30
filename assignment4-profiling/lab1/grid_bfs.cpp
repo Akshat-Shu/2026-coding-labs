@@ -190,7 +190,6 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
                       vector<uint16_t> &distance,
                       vector<int> &frontier) {
     int total = rows * cols;
-    fill(distance.begin(), distance.begin() + total, static_cast<uint16_t>(-1));
     size_t frontier_head = 0;
     size_t frontier_tail = 0;
 
@@ -203,19 +202,18 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
 
     const int offsets[4] = {-cols, cols, -1, 1};
 
+    int result = -1;
     while (frontier_head < frontier_tail) {
         int current_index = frontier[frontier_head++];
         if (current_index == goal_index) {
-            return distance[current_index];
+            result = distance[current_index];
+            break;
         }
 
         for (int direction = 0; direction < 4; ++direction) {
             int next_index = current_index + offsets[direction];
 
-            if (grid[next_index] == '#') {
-                continue;
-            }
-
+            // 0xFFFE = blocked or visited. Only 0xFFFF (open, unvisited) passes.
             if (distance[next_index] != static_cast<uint16_t>(-1)) {
                 continue;
             }
@@ -226,7 +224,12 @@ int shortest_path_bfs(const char *grid, int rows, int cols,
         }
     }
 
-    return -1;
+
+    for (int i = 0; i < total; ++i) {
+        distance[i] = (grid[i] == '#') ? static_cast<uint16_t>(-2)
+                                       : static_cast<uint16_t>(-1);
+    }
+    return result;
 }
 
 /**
@@ -241,6 +244,13 @@ RunSummary run_all_requests(const char *grid, int rows, int cols,
     int total = rows * cols;
     vector<uint16_t> distance_buf(total);
     vector<int> frontier_buf(total);
+
+    // Encode "blocked" into the distance sentinel: 0xFFFE = blocked, 0xFFFF = open & unvisited.
+    // BFS only needs to check `distance[i] != 0xFFFF` then — blocked and visited both fail.
+    for (int i = 0; i < total; ++i) {
+        distance_buf[i] = (grid[i] == '#') ? static_cast<uint16_t>(-2)
+                                           : static_cast<uint16_t>(-1);
+    }
 
     for (int i = 0; i < summary.requests; ++i) {
         const RouteRequest &request = requests[i];
@@ -441,6 +451,11 @@ bool run_sanity_check() {
     vector<uint16_t> heatmap(sanity_rows * sanity_cols, 0);
     vector<uint16_t> distance_buf(sanity_rows * sanity_cols);
     vector<int> frontier_buf(sanity_rows * sanity_cols);
+
+    for (int i = 0; i < sanity_rows * sanity_cols; ++i) {
+        distance_buf[i] = (sanity_grid[i] == '#') ? static_cast<uint16_t>(-2)
+                                                  : static_cast<uint16_t>(-1);
+    }
 
     RouteRequest reachable{{1, 1}, {5, 5}};
     RouteRequest unreachable{{1, 1}, {2, 2}};

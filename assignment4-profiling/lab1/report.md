@@ -30,6 +30,8 @@
 
 14. Removed the `source` vector in `compute_congestion_pressure`. It was a precomputed copy of `heatmap >> 3` that the inner loop read once per cell. Replaced it with reading `heatmap[index] >> 3` directly inside the loop. Saves the 270 KB allocation, removes the init pass over all 67,600 cells, and the inner loop now reads 2 bytes per cell from `heatmap` (uint16_t after step 13) instead of 4 bytes per cell from `source` (int). Vectorization survives — the col loop still reports "loop vectorized using 32 byte vectors" under `-fopt-info-vec` after the change.
 
+15. Merged the grid blocked-check into the `distance` array via a second sentinel value. Pre-fill `distance_buf` once in `run_all_requests` with `0xFFFE` for blocked cells and `0xFFFF` for open cells. Then the BFS hot loop's two condition checks (`grid[next_index] == '#'` and `distance[next_index] != sentinel`) collapse into one — `distance[next_index] != 0xFFFF` rejects blocked and visited cells alike. The `grid` array is no longer read in the BFS hot path at all. Reset between calls is now a sequential rewrite of the full `distance` array from `grid` (`distance[i] = (grid[i] == '#') ? 0xFFFE : 0xFFFF`). First tried a touched-list reset (only touch cells in `frontier`), which was correct but ~10 ms slower and noisier — the random-indexed writes cost more than a vectorizable sequential pass over all cells, even though the latter does 2.5× as many writes.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -201,6 +203,32 @@ time_sec ≈ 0.71
 
 Wall-clock barely moved (the inner loop is dominated by the five `cur_data` reads, not the one source read), but the memory footprint is meaningfully smaller and the code is a step cleaner — one fewer buffer to allocate and reason about.
 
+A fresh `perf stat` after all that showed the program was now dominated by BFS (around 79% of wall time) with a branch-miss rate of ~13% and an IPC of only 1.18 — clearly memory- and branch-limited. The hottest line in BFS was still `if (grid[next_index] == '#')` at ~16% of all program instructions, and the second-hottest was `if (distance[next_index] != sentinel)` at ~8%. Together those two checks were a quarter of the entire program, and they're both data-dependent (random grid, BFS visit history) so the predictor can't learn them.
+
+The fix: collapse the two checks into one by encoding "blocked" inside the distance array itself. Pre-fill `distance_buf` in `run_all_requests` so blocked cells start at `0xFFFE` and open cells start at `0xFFFF`. Then the BFS body only needs `if (distance[next_index] != 0xFFFF) continue;` — that rejects both blocked cells (`0xFFFE`) and previously-visited cells (any real distance). The grid array stops being read in the hot path entirely.
+
+The per-call reset has to change with it. A plain `memset` would wipe the blocked sentinels. Two options: walk only the touched cells (those in `frontier`) and set them back to `0xFFFF` — a "touched-list" reset — or do a sequential pass over the full distance array, rederiving each cell from `grid[i]`. I tried both. The touched-list version is conceptually appealing because it only does O(visited) work per call, but it's a stream of random-indexed writes; the sequential rewrite does 2.5× more total work but the writes are linear, prefetcher-friendly, and AVX2-vectorizable. On this workload the sequential pass wins by about 10 ms median and is much more stable run-to-run. Kept the sequential version. After:
+
+```
+0.380 seconds time elapsed
+```
+
+The diff in `perf stat` is striking — same instruction count, but every other metric improved:
+
+| metric | before | after |
+|---|---|---|
+| wall time | 0.571 s | **0.380 s** |
+| cycles | 2.15 B | 1.53 B |
+| IPC | 1.18 | **1.68** |
+| branches | 331 M | 283 M |
+| branch misses | 42.9 M (12.96%) | **23.6 M (8.35%)** |
+| L1 D-cache loads | 636 M | 568 M |
+| L1 D-cache load misses | 32.7 M (5.13%) | **8.3 M (1.47%)** |
+
+L1 load misses dropped by **75%** — that's the grid array (67 KB) falling out of the BFS working set. Branch misses dropped by **45%** — one of the two data-dependent branches per neighbor is gone. IPC jumped from 1.18 to 1.68, meaning the CPU is finally finding parallelism in the inner loop now that there's less serial dependency on cache and predictor.
+
+This is the biggest single optimization in the lab.
+
 ### Before — baseline
 
 ```
@@ -215,12 +243,14 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — final
 
 ```
-time_sec ≈ 0.71
+0.348 seconds time elapsed
+0.348 seconds user
+0.001 seconds sys
 ```
 
-Same 1200 route requests, same 4096 congestion passes, same final checksums. ~3× faster end-to-end.
+Same 1,200 route requests, same 4,096 congestion passes, same checksums. ~6× faster end-to-end (~2.16 s → ~0.35 s).
 
-Callgrind program totals on the final version: `shortest_path_bfs` at 43.04% of instructions (was 30.48%), `compute_congestion_pressure` at 17.64% (was 19.99%). The relative split changed because `compute_congestion_pressure` shrank faster than BFS in absolute terms — vectorization did its job. BFS now dominates the profile, but it's also dramatically cheaper than it used to be; what's left is the irreducible work of touching every reachable cell across 1200 searches. Memory footprint is also smaller: `heatmap` shrunk in half, and `compute_congestion_pressure` no longer allocates a separate `source` buffer.
+The final `perf stat` shows IPC at 1.68 (was 1.18), branch-miss rate at 8.35% (was 12.96%), and L1 D-cache miss rate at 1.47% (was 5.13%). The program is no longer memory- or branch-limited in the way it used to be. With BFS now reading a single array per neighbor and one of its two unpredictable branches gone, the inner loop runs close to what the front-end can dispatch. `compute_congestion_pressure` is bandwidth-bound on its three arrays (`current`, `next`, `heatmap`) and sits near the ceiling for what AVX2 can sustain on this CPU. The rest of the program (~2%) is one-time setup.
 
 
 ## 3. Correctness Evidence
