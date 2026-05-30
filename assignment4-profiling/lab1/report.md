@@ -20,6 +20,8 @@
 
 9. Changed `frontier` from `vector<Point>` (8 bytes per entry) to `vector<int>` (4 bytes per entry), storing the flat index `row * cols + col` directly. Halves the frontier's size — for a 260×260 grid that's ~540 KB → ~270 KB, again less cache pressure and a smaller per-call allocation. Recovering `row`/`col` from the index when popping uses one division and a multiply-subtract (`current_col = current_index - current_row * cols`), which the compiler turns into a multiply-by-magic-number for div-by-constant.
 
+10. Flattened the grid from `vector<string>` (a vector of separately heap-allocated string objects) to a single `static std::array<char, kRows * kCols>` declared inside `main`. The `static` keyword gives static storage duration without making the variable global, and the buffer lives in BSS — zero-initialized once at program start and contiguous in memory. Switched every function that consumed the grid to take `const char *grid, int rows, int cols` and index by `grid[row * cols + col]`. Eliminated the double pointer-chase per cell read (`vector<string>` → `string::data()` → `data[col]`) that was responsible for a huge fraction of the program's L1 cache misses. Also updated the sanity-check grid to use the same flat layout.
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -142,6 +144,21 @@ time_sec = 0.61071
 
 Another ~80ms. The frontier was about as big as `distance` was before shrinking it, so the saving is comparable.
 
+Going back to callgrind, the biggest single line in the BFS hot path was still `grid[next_row][next_col] == '#'`. `grid` was a `vector<string>` — a vector of separately heap-allocated string objects — which means every cell read walked a pointer to find the row's data buffer, then indexed into it. Two pointer chases, two unrelated cache lines per read. The fix is to flatten the grid to a single contiguous buffer.
+
+Pulled `grid` into a `static std::array<char, kRows * kCols>` declared inside `main`. The `static` keyword gives it static storage duration without making it a global, which is what I wanted — the buffer lives in BSS, gets zero-initialized at program start, and is reachable only from `main` and whatever it passes the pointer into. That meant changing the grid-using functions (`is_open`, `generate_grid`, `next_open_cell`, `generate_requests`, `shortest_path_bfs`, `run_all_requests`, `count_open_cells`, `print_summary`) to take `const char *grid, int rows, int cols` and index by `grid[row * cols + col]`.
+
+Also had to flatten the sanity grid the same way. After:
+
+```
+time_sec = 0.659316
+       0.660938916 seconds time elapsed
+       0.658858000 seconds user
+       0.000999000 seconds sys
+```
+
+Wall-clock moved less than I expected, but the L1 D-cache miss count dropped by about 30% in `perf stat`, which is the real story — the program is doing the same amount of work but with much better cache behavior. Wall-clock will improve further once the BFS gets reused buffers later.
+
 ### Before — baseline
 
 ```
@@ -156,10 +173,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 0.61071
-       0.611233593 seconds time elapsed
-       0.607350000 seconds user
-       0.003989000 seconds sys
+time_sec = 0.659316
+       0.660938916 seconds time elapsed
+       0.658858000 seconds user
+       0.000999000 seconds sys
 ```
 
 
