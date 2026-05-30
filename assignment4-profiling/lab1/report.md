@@ -8,6 +8,8 @@
 
 3. Replaced the if/else in `next_pressure_value` with a ternary, so the compiler can lower it to a `cmov` instead of a branch. Two reasons: the branch is data-dependent on `center`, so the predictor can't really learn it; and removing the branch is a prerequisite for auto-vectorizing the surrounding loop later.
 
+4. Swapped the loop nesting in `compute_congestion_pressure`. Was `for col { for row { ... } }`, now `for row { for col { ... } }`. The grid is row-major (`index = row * cols + col`), so the inner loop now walks contiguous memory instead of jumping by `cols * sizeof(int)` per iteration. The README hints at this — it says the inner loops "intentionally walk a row-major array in column-major order to create a cache-locality problem for students to find".
+
 ## 2. Methodology Walkthrough
 
 I ran the program first with `time`, just to know what I was dealing with:
@@ -56,6 +58,17 @@ time_sec = 1.45655
 
 Modest gain. The real reason for this change shows up later.
 
+Then I went back to `compute_congestion_pressure`. The original loop ran `for col { for row { ... } }`, which on a row-major array means every inner step jumps `cols * 4` bytes ahead in memory — basically a guaranteed cache miss per cell. Flipped the nesting to `for row { for col { ... } }` so the inner loop walks contiguous bytes. After:
+
+```
+time_sec = 1.38238
+       1.383613469 seconds time elapsed
+       1.380458000 seconds user
+       0.002000000 seconds sys
+```
+
+About 80ms off, and the L1 D-cache miss rate dropped noticeably in `perf stat`.
+
 ### Before — baseline
 
 ```
@@ -70,10 +83,10 @@ Callgrind totals on the baseline: `shortest_path_bfs` at 30.48% of instructions,
 ### After — current
 
 ```
-time_sec = 1.45655
-       1.459196375 seconds time elapsed
-       1.455199000 seconds user
-       0.002998000 seconds sys
+time_sec = 1.38238
+       1.383613469 seconds time elapsed
+       1.380458000 seconds user
+       0.002000000 seconds sys
 ```
 
 

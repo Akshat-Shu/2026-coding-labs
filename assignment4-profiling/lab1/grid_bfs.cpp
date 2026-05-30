@@ -351,8 +351,8 @@ CongestionSummary compute_congestion_pressure(const vector<int> &heatmap,
     }
 
     for (int pass = 0; pass < congestion_passes; ++pass) {
-        for (int col = 1; col < cols - 1; ++col) {
-            for (int row = 1; row < rows - 1; ++row) {
+        for (int row = 1; row < rows - 1; ++row) {
+            for (int col = 1; col < cols - 1; ++col) {
                 int index = row * cols + col;
 
                 int center = current[index];
